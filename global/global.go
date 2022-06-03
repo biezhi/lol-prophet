@@ -159,7 +159,11 @@ var (
 	Cleanups     = make(map[string]func() error)
 	AppBuildInfo = AppInfo{}
 
-	SummonerIDListScore = SummonerIDMapScore{}
+	SummonerIDListScore = SummonerIDMapScore{
+		SelfTeam:   []UserScore{},
+		EnemyTeam:  []UserScore{},
+		BlackUsers: []BlockUserScore{},
+	}
 )
 
 // DB

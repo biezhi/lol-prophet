@@ -1,8 +1,10 @@
 import { Button, Checkbox, Col, Form, FormInstance, Input, InputNumber, message, Modal, Row, Select, Space, Switch, Table } from 'antd'
+import { CheckboxChangeEvent } from 'antd/lib/checkbox';
+import { CheckboxOptionType, CheckboxValueType } from 'antd/lib/checkbox/Group';
 import type { ColumnsType } from 'antd/lib/table';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useWebSocket, { ReadyState } from 'react-use-websocket';
-import { blackSummoner, champions, Config, getAllConfig, getSummoner, querySummonerScore, SummonerItem, SummonerMap, updateConfig } from './api'
+import { blackBatchSummoner, blackSummoner, champions, Config, getAllConfig, getSummoner, querySummonerScore, SummonerItem, SummonerMap, updateConfig } from './api'
 import "./App.less"
 
 const defaultHorseName = ['通天代', '小代', '上等马', '中等马', '下等马', '牛马']
@@ -211,19 +213,26 @@ const Features = () => {
 }
 
 const PullBlack = () => {
-  const [userData, setData] = useState<SummonerMap>()
+  const [userData, setData] = useState<SummonerMap>({
+    selfTeam: [],
+    enemyTeam: [],
+    blackUsers: []
+  })
   const [visible, setVisible] = useState<boolean | number>(false);
+  const [visibleAll, setVisibleAll] = useState<boolean>(false);
   const _ = useWebSocket('ws://localhost:4396/ws', {
     onMessage: (data) => {
       const message = JSON.parse(data.data)
       if (message.type == 'summonerMap') {
         setData(message.data)
-        if (window.Notification.permission == "granted") {
-          new Notification("遇到拉黑的沙雕")
-        } else if (window.Notification.permission != "denied") {
-          window.Notification.requestPermission(function (permission) {
+        if (message.data?.blackUsers?.length > 0) {
+          if (window.Notification.permission == "granted") {
             new Notification("遇到拉黑的沙雕")
-          });
+          } else if (window.Notification.permission != "denied") {
+            window.Notification.requestPermission(function (permission) {
+              new Notification("遇到拉黑的沙雕")
+            });
+          }
         }
       }
     },
@@ -233,6 +242,7 @@ const PullBlack = () => {
     const { data } = await getSummoner()
     setData(data)
   }
+  const summonerList = useMemo(() => [...userData?.selfTeam, ...userData?.enemyTeam], [userData])
 
   const columns: ColumnsType<SummonerItem> = [
     {
@@ -274,16 +284,41 @@ const PullBlack = () => {
       <Space>
         <Button onClick={() => getData()}>手动获取对局用户</Button>
         <Button type='primary' onClick={() => { setVisible(true) }}>拉黑指定辣鸡</Button>
+        <Button
+          onClick={() => {
+            setVisibleAll(true)
+          }}
+          disabled={!summonerList.length}
+        >批量拉黑
+        </Button>
       </Space>
       <Row gutter={16}>
         <Col span={8}>
-          <Table title={() => '我方'} columns={columns} dataSource={userData?.selfTeam ?? []} pagination={false} />
+          <Table
+            title={() => '我方'}
+            rowKey='summonerID'
+            columns={columns}
+            dataSource={userData?.selfTeam ?? []}
+            pagination={false}
+          />
         </Col>
         <Col span={8}>
-          <Table title={() => '敌方'} columns={columns} dataSource={userData?.enemyTeam ?? []} pagination={false} />
+          <Table
+            title={() => '敌方'}
+            rowKey='summonerID'
+            columns={columns}
+            dataSource={userData?.enemyTeam ?? []}
+            pagination={false}
+          />
         </Col>
         <Col span={8}>
-          <Table title={() => '已拉黑'} columns={blockCloumns} dataSource={userData?.blackUsers ?? []} pagination={false} />
+          <Table
+            title={() => '已拉黑'}
+            rowKey='summonerID'
+            columns={blockCloumns}
+            dataSource={userData?.blackUsers ?? []}
+            pagination={false}
+          />
         </Col>
       </Row>
       <BlockModal
@@ -291,6 +326,11 @@ const PullBlack = () => {
         onCancel={() => {
           setVisible(false);
         }} />
+      <BlockBatchModal
+        visible={visibleAll}
+        summonerList={summonerList}
+        onCancel={() => { setVisibleAll(false) }}
+      />
     </Space>
   )
 }
@@ -324,7 +364,10 @@ const BlockModal: React.FC<ModalFormProps> = ({ visible, onCancel }) => {
             onCancel()
           );
       }}
-      onCancel={onCancel}
+      onCancel={() => {
+        form.resetFields();
+        onCancel()
+      }}
     >
       <Form
         form={form}
@@ -344,3 +387,84 @@ const BlockModal: React.FC<ModalFormProps> = ({ visible, onCancel }) => {
     </Modal>
   )
 }
+const BlockBatchModal: React.FC<ModalFormProps & { summonerList: SummonerItem[] }> = ({ visible, onCancel, summonerList }) => {
+  const [form] = Form.useForm();
+
+  const option = useMemo(() => {
+    return summonerList?.map((item: SummonerItem) => ({
+      label: item.summonerName,
+      value: item.summonerID
+    }))
+  }, [summonerList])
+  return (
+    <Modal
+      title="批量拉黑"
+      okText="确定"
+      cancelText="取消"
+      visible={!!visible}
+      onOk={() => {
+        form
+          .validateFields()
+          .then(async values => {
+            await blackBatchSummoner({ list: summonerList?.filter(f => values?.list?.includes(f.summonerID)), reason: values?.reason })
+            message.info('拉黑成功')
+            form.resetFields();
+          }).finally(() =>
+            onCancel()
+          );
+      }}
+      onCancel={() => {
+        form.resetFields();
+        onCancel()
+      }}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+      >
+        <Form.Item name="list" label="批量选择" rules={[{ required: true, message: '请选择！' }]}>
+          <CheckboxGroup option={option} />
+        </Form.Item>
+        <Form.Item name="reason" label="理由">
+          <Input />
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+interface CheckboxGroupProps {
+  option: CheckboxOptionType[]
+  value?: CheckboxValueType[];
+  onChange?: (value: CheckboxValueType[]) => void;
+}
+const CheckboxGroup: React.FC<CheckboxGroupProps> = ({ option, value, onChange }) => {
+  const [checkedList, setCheckedList] = useState<CheckboxValueType[]>(value ?? []);
+  const [indeterminate, setIndeterminate] = useState(false);
+  const [checkAll, setCheckAll] = useState(false);
+
+  const onGroupChange = (list: CheckboxValueType[]) => {
+    setCheckedList(list);
+    onChange?.(list)
+    setIndeterminate(!!list.length && list.length < option.length);
+    setCheckAll(list.length === option.length);
+  };
+
+  const allList = option?.map(i => i.value)
+
+  const onCheckAllChange = (e: CheckboxChangeEvent) => {
+    setCheckedList(e.target.checked ? allList : []);
+    onChange?.(e.target.checked ? allList : [])
+    setIndeterminate(false);
+    setCheckAll(e.target.checked);
+  };
+
+
+  return (
+    <>
+      <Checkbox indeterminate={indeterminate} onChange={onCheckAllChange} checked={checkAll}>
+        全选
+      </Checkbox>
+      <Checkbox.Group options={option} value={checkedList} onChange={onGroupChange} />
+    </>
+  );
+};

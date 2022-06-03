@@ -526,6 +526,9 @@ func (p Prophet) CalcEnemyTeamScore() {
 	for _, sID := range selfTeamUsers {
 		sID := sID
 		g.Go(func() error {
+			if sID == p.currSummoner.SummonerId {
+				return nil
+			}
 			sScore, err := GetSummonerInfo(sID)
 			if err != nil {
 				return nil

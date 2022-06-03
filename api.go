@@ -2,6 +2,7 @@ package hh_lol_prophet
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,14 @@ type (
 		SummonerName string `json:"summonerName"`
 		SummonerID   int64  `json:"summonerID"`
 		Reason       string `json:"reason"`
+	}
+	summonerBatchItem struct {
+		SummonerName string `json:"summonerName"`
+		SummonerID   int64  `json:"summonerID"`
+	}
+	summonerBatchReq struct {
+		List   []summonerBatchItem `json:"list"`
+		Reason string              `json:"reason"`
 	}
 )
 
@@ -177,4 +186,32 @@ func (api Api) BlackSummoner(c *gin.Context) {
 		app.ErrorMsg("已经拉黑过了")
 	}
 
+}
+
+func (api Api) BlackBatchSummoner(c *gin.Context) {
+	app := ginApp.GetApp(c)
+	d := &summonerBatchReq{}
+	if err := c.ShouldBind(d); err != nil {
+		app.ValidError(err)
+		return
+	}
+	var blockIDs []int64
+	var blacklist []global.BlacklistItem
+
+	for _, v := range d.List {
+		blockIDs = append(blockIDs, v.SummonerID)
+		blacklist = append(blacklist, global.BlacklistItem{
+			SummonerID:   v.SummonerID,
+			SummonerName: v.SummonerName,
+			Reason:       d.Reason,
+		})
+	}
+	var items global.BlacklistItem
+	results := global.SqliteDB.Where("summoner_id IN ?", blockIDs).First(&items)
+	if errors.Is(results.Error, gorm.ErrRecordNotFound) {
+		global.SqliteDB.Create(&blacklist)
+		app.Data("成功拉黑" + strconv.Itoa(len(blockIDs)) + "个")
+	} else {
+		app.ErrorMsg("有些已经拉黑过了")
+	}
 }

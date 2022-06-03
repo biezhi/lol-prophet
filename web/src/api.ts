@@ -39,12 +39,19 @@ export interface SummonerItem {
 export interface SummonerMap {
     selfTeam: SummonerItem[]
     enemyTeam: SummonerItem[]
-    blackUsers:SummonerItem[]
+    blackUsers: SummonerItem[]
 }
 export interface BlockInfo {
     summonerName?: string
     summonerID?: number
-    reason?:string
+    reason?: string
+}
+export interface BlockBatchInfo {
+    list: {
+        summonerName: string
+        summonerID: number
+    }[]
+    reason?: string
 }
 export const getAllConfig = () => {
     return axios.post<Config>('/v1/config/getAll')
@@ -60,8 +67,11 @@ export const querySummonerScore = (summonerName: string) => {
 export const getSummoner = () => {
     return axios.get<SummonerMap>('/v1/app/getSummoner')
 }
-export const blackSummoner = (data:BlockInfo) => {
-    return axios.post('/v1/app/blackSummoner',data)
+export const blackSummoner = (data: BlockInfo) => {
+    return axios.post('/v1/app/blackSummoner', data)
+}
+export const blackBatchSummoner = (data: BlockBatchInfo) => {
+    return axios.post('/v1/app/blackBatchSummoner', data)
 }
 export const champions = [
     { id: 0, name: '无' },

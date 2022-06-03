@@ -37,4 +37,6 @@ func initV1Module(r *gin.Engine, api *Api) {
 
 	// 拉黑用户
 	v1.POST("app/blackSummoner", api.BlackSummoner)
+	// 批量拉黑用户
+	v1.POST("app/blackBatchSummoner", api.BlackBatchSummoner)
 }
